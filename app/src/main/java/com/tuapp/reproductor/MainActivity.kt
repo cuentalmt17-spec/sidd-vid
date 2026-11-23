@@ -2,15 +2,22 @@ package com.tuapp.reproductor
 
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.database.Cursor
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
@@ -48,6 +55,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import java.io.File
 import java.util.Locale
 import kotlin.math.abs
 
@@ -55,6 +63,10 @@ import kotlin.math.abs
 // CARTEL 1: VARIABLES, ESTADO DEL REPRODUCTOR Y LAUNCHERS
 // ════════════════════════════════════════════════════════════════
 class MainActivity : AppCompatActivity() {
+
+    private val githubApkUrl =
+        "https://github.com/cuentalmt17-spec/sidd-vid/releases/latest/download/app-debug.apk"
+    private val apkFileName = "reproductor-sidd-update.apk"
 
     private lateinit var rootLayout: FrameLayout
     private lateinit var playerView: PlayerView
@@ -82,6 +94,9 @@ class MainActivity : AppCompatActivity() {
     private var currentIndex: Int = -1
     private var externalSubtitleUri: Uri? = null
 
+    private var downloadId: Long = -1L
+    private var downloadReceiverRegistered = false
+
     private val speeds = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private var speedIdx = 1
     private var doubleTapStepMs = 15_000L
@@ -100,6 +115,42 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             updateProgressUi()
             mainHandler.postDelayed(this, 250)
+        }
+    }
+
+    private val downloadCompleteReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: -1L
+            if (id == -1L || id != downloadId) return
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val query = DownloadManager.Query().setFilterById(id)
+            dm.query(query)?.use { cursor: Cursor ->
+                if (cursor.moveToFirst()) {
+                    val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val status = if (statusIdx >= 0) cursor.getInt(statusIdx) else -1
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        val localUriStr = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                            .let { idx -> if (idx >= 0) cursor.getString(idx) else null }
+                        val downloadedUri = dm.getUriForDownloadedFile(id)
+                            ?: localUriStr?.let { Uri.parse(it) }
+                        if (downloadedUri != null) {
+                            launchApkInstaller(downloadedUri)
+                        } else {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "APK descargado, abrilo desde Descargas",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } else if (status == DownloadManager.STATUS_FAILED) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Falló la descarga del APK",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
         }
     }
 
@@ -156,6 +207,7 @@ class MainActivity : AppCompatActivity() {
             hideSystemBars()
             buildUi()
             setContentView(rootLayout)
+            registerDownloadReceiverIfNeeded()
             initPlayer()
             if (!splashPlayed) {
                 splashPlayed = true
@@ -223,7 +275,12 @@ class MainActivity : AppCompatActivity() {
                 if (isPrimary) Color.parseColor("#4ADE80") else Color.parseColor("#66BBF7D0"),
                 999f
             )
-            setPadding(if (isPrimary) 64 else 52, if (isPrimary) 22 else 20, if (isPrimary) 64 else 52, if (isPrimary) 22 else 20)
+            setPadding(
+                if (isPrimary) 64 else 52,
+                if (isPrimary) 22 else 20,
+                if (isPrimary) 64 else 52,
+                if (isPrimary) 22 else 20
+            )
             minimumHeight = 0
             minHeight = 0
             minWidth = if (isPrimary) 168 else 142
@@ -598,6 +655,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val updateBtn = makeChipButton("Actualizar", highlighted = true).apply {
+            setOnClickListener {
+                startGitHubApkDownload()
+                resetHideTimer()
+            }
+        }
+
         lockBtn = makeChipButton("Bloquear").apply {
             setOnClickListener {
                 isLocked = true
@@ -623,11 +687,16 @@ class MainActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { rightMargin = 8 }
+        updateBtn.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { rightMargin = 8 }
 
         toolsRow.addView(listBtn)
         toolsRow.addView(zoomBtn)
         toolsRow.addView(speedBtn)
         toolsRow.addView(rotateBtn)
+        toolsRow.addView(updateBtn)
         toolsRow.addView(lockBtn)
         toolsScroll.addView(toolsRow)
         bottomPanel.addView(toolsScroll)
@@ -974,8 +1043,71 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // CARTEL 9: DIÁLOGOS, TIEMPO, VISIBILIDAD Y CICLO DE VIDA
+    // CARTEL 9: DIÁLOGOS, ACTUALIZACIÓN, TIEMPO Y CICLO DE VIDA
     // ════════════════════════════════════════════════════════════════
+    private fun registerDownloadReceiverIfNeeded() {
+        if (downloadReceiverRegistered) return
+        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(downloadCompleteReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(downloadCompleteReceiver, filter)
+        }
+        downloadReceiverRegistered = true
+    }
+
+    private fun startGitHubApkDownload() {
+        try {
+            val oldFile = File(
+                getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                apkFileName
+            )
+            if (oldFile.exists()) {
+                oldFile.delete()
+            }
+
+            val request = DownloadManager.Request(Uri.parse(githubApkUrl))
+                .setTitle("reproductor sidd")
+                .setDescription("Descargando actualización desde GitHub...")
+                .setMimeType("application/vnd.android.package-archive")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(
+                    this,
+                    Environment.DIRECTORY_DOWNLOADS,
+                    apkFileName
+                )
+
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            downloadId = dm.enqueue(request)
+            showHud("Descargando APK...")
+            Toast.makeText(this, "Descargando actualización...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "No se pudo iniciar la descarga: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun launchApkInstaller(apkUri: Uri) {
+        try {
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(installIntent)
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "Abrí el archivo descargado para actualizar: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     private fun showTracksDialog() {
         val p = player
         if (p == null || p.currentMediaItem == null) {
@@ -1141,6 +1273,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (downloadReceiverRegistered) {
+            try {
+                unregisterReceiver(downloadCompleteReceiver)
+            } catch (_: Exception) {
+            }
+            downloadReceiverRegistered = false
+        }
         mainHandler.removeCallbacksAndMessages(null)
         player?.release()
         player = null
