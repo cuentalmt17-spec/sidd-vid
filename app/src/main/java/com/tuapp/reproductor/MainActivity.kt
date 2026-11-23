@@ -1,3 +1,4 @@
+
 package com.tuapp.reproductor
 
 import android.content.Intent
@@ -12,11 +13,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.text.TextUtils
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -33,6 +36,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.ExoPlayer
@@ -46,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rootLayout: FrameLayout
     private lateinit var playerView: PlayerView
     private lateinit var brightnessOverlay: View
+    private lateinit var emptyCard: LinearLayout
     private lateinit var uiOverlay: FrameLayout
     private lateinit var topBar: LinearLayout
     private lateinit var bottomPanel: LinearLayout
@@ -100,6 +105,7 @@ class MainActivity : AppCompatActivity() {
                 playlist = uris
                 currentIndex = 0
                 externalSubtitleUri = null
+                emptyCard.visibility = View.GONE
                 loadUriAt(0)
             }
         }
@@ -128,6 +134,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             WindowCompat.setDecorFitsSystemWindows(window, false)
             hideSystemBars()
             buildUi()
@@ -162,23 +169,28 @@ class MainActivity : AppCompatActivity() {
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
             setTextColor(if (highlighted) Color.parseColor("#BBF7D0") else Color.parseColor("#ECFDF5"))
             background = pillBg(
-                if (highlighted) Color.parseColor("#4422C55E") else Color.parseColor("#AA102417"),
-                if (highlighted) Color.parseColor("#22C55E") else Color.parseColor("#44BBF7D0")
+                if (highlighted) Color.parseColor("#4422C55E") else Color.parseColor("#B80C1C12"),
+                if (highlighted) Color.parseColor("#4ADE80") else Color.parseColor("#55BBF7D0")
             )
-            setPadding(24, 10, 24, 10)
+            setPadding(22, 10, 22, 10)
             minimumHeight = 0
             minHeight = 0
+            minimumWidth = 0
+            minWidth = 0
         }
     }
 
     private fun buildUi() {
         val greenAccent = Color.parseColor("#22C55E")
+        val greenBright = Color.parseColor("#4ADE80")
         val greenSoftText = Color.parseColor("#DCFCE7")
 
         rootLayout = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Color.parseColor("#07110B"))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -188,7 +200,7 @@ class MainActivity : AppCompatActivity() {
         playerView = PlayerView(this).apply {
             useController = false
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Color.parseColor("#07110B"))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -206,6 +218,74 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(brightnessOverlay)
 
+        // Tarjeta de bienvenida mientras no hay video cargado
+        emptyCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = pillBg(
+                Color.parseColor("#E60B1A11"),
+                Color.parseColor("#664ADE80"),
+                36f
+            )
+            setPadding(48, 40, 48, 40)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            ).apply {
+                leftMargin = 40
+                rightMargin = 40
+            }
+        }
+
+        val badgeText = TextView(this).apply {
+            text = "▶"
+            textSize = 26f
+            setTextColor(greenBright)
+            gravity = Gravity.CENTER
+        }
+
+        val appHeading = TextView(this).apply {
+            text = "reproductor sidd"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#F0FDF4"))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 8 }
+        }
+
+        val appSub = TextView(this).apply {
+            text = "MKV • Multi-audio • Subtítulos • Saltos 15s/30s"
+            textSize = 12f
+            setTextColor(Color.parseColor("#86EFAC"))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 6 }
+        }
+
+        val choosePrimaryBtn = makeChipButton("Seleccionar video", highlighted = true).apply {
+            textSize = 14f
+            setPadding(36, 16, 36, 16)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 20 }
+            setOnClickListener {
+                pickVideosLauncher.launch(arrayOf("video/*"))
+            }
+        }
+
+        emptyCard.addView(badgeText)
+        emptyCard.addView(appHeading)
+        emptyCard.addView(appSub)
+        emptyCard.addView(choosePrimaryBtn)
+        rootLayout.addView(emptyCard)
+
         uiOverlay = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -216,8 +296,8 @@ class MainActivity : AppCompatActivity() {
         topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#88000000"))
-            setPadding(36, 28, 36, 24)
+            setBackgroundColor(Color.parseColor("#9907110B"))
+            setPadding(28, 24, 28, 20)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -226,12 +306,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         titleText = TextView(this).apply {
-            text = "reproductor sidd — Toca Videos para elegir"
+            text = "reproductor sidd"
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#F0FDF4"))
             maxLines = 1
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            ellipsize = TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = 12
+            }
         }
 
         val openBtn = makeChipButton("Videos", highlighted = true).apply {
@@ -245,7 +328,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = 12 }
+            ).apply { leftMargin = 10 }
             setOnClickListener {
                 showTracksDialog()
                 resetHideTimer()
@@ -264,24 +347,26 @@ class MainActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER
-            )
+            ).apply {
+                topMargin = 36
+            }
         }
 
         val backBtn = makeChipButton("⏮").apply {
-            textSize = 18f
-            setPadding(32, 22, 32, 22)
+            textSize = 17f
+            setPadding(28, 18, 28, 18)
             setOnClickListener { jumpBy(-doubleTapStepMs) }
         }
 
         playPauseBtn = makeChipButton("▶", highlighted = true).apply {
-            textSize = 20f
-            setPadding(42, 28, 42, 28)
+            textSize = 19f
+            setPadding(38, 24, 38, 24)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                leftMargin = 36
-                rightMargin = 36
+                leftMargin = 28
+                rightMargin = 28
             }
             setOnClickListener {
                 val p = player ?: return@setOnClickListener
@@ -297,8 +382,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val fwdBtn = makeChipButton("⏭").apply {
-            textSize = 18f
-            setPadding(32, 22, 32, 22)
+            textSize = 17f
+            setPadding(28, 18, 28, 18)
             setOnClickListener { jumpBy(doubleTapStepMs) }
         }
 
@@ -309,8 +394,8 @@ class MainActivity : AppCompatActivity() {
 
         bottomPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#99000000"))
-            setPadding(36, 18, 36, 26)
+            setBackgroundColor(Color.parseColor("#B307110B"))
+            setPadding(28, 16, 28, 24)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -335,11 +420,11 @@ class MainActivity : AppCompatActivity() {
 
         seekBar = SeekBar(this).apply {
             max = 1000
-            progressTintList = ColorStateList.valueOf(greenAccent)
-            thumbTintList = ColorStateList.valueOf(greenAccent)
+            progressTintList = ColorStateList.valueOf(greenBright)
+            thumbTintList = ColorStateList.valueOf(greenBright)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 16
-                rightMargin = 16
+                leftMargin = 14
+                rightMargin = 14
             }
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -389,7 +474,7 @@ class MainActivity : AppCompatActivity() {
 
         val jumpRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_VERTICAL
         }
 
         val b30 = makeChipButton("-30s").apply { setOnClickListener { jumpBy(-30_000L) } }
@@ -406,24 +491,24 @@ class MainActivity : AppCompatActivity() {
         val f15 = makeChipButton("+15s").apply { setOnClickListener { jumpBy(15_000L) } }
         val f30 = makeChipButton("+30s").apply { setOnClickListener { jumpBy(30_000L) } }
 
-        val chipMargin = LinearLayout.LayoutParams(
+        val right8 = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
 
-        b30.layoutParams = chipMargin
+        b30.layoutParams = right8
         b15.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
         stepToggleBtn.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
         f15.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
 
         jumpRow.addView(b30)
         jumpRow.addView(b15)
@@ -433,13 +518,17 @@ class MainActivity : AppCompatActivity() {
         jumpScroll.addView(jumpRow)
         bottomPanel.addView(jumpScroll)
 
-        val toolsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        val toolsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = 10 }
+        }
+
+        val toolsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
 
         val listBtn = makeChipButton("Lista").apply {
@@ -495,34 +584,30 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val space = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
-        }
-
         listBtn.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
         zoomBtn.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
         speedBtn.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
         rotateBtn.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = 10 }
+        ).apply { rightMargin = 8 }
 
         toolsRow.addView(listBtn)
         toolsRow.addView(zoomBtn)
         toolsRow.addView(speedBtn)
         toolsRow.addView(rotateBtn)
-        toolsRow.addView(space)
         toolsRow.addView(lockBtn)
-        bottomPanel.addView(toolsRow)
+        toolsScroll.addView(toolsRow)
+        bottomPanel.addView(toolsScroll)
 
         uiOverlay.addView(bottomPanel)
         rootLayout.addView(uiOverlay)
@@ -532,7 +617,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#ECFDF5"))
-            background = pillBg(Color.parseColor("#D90C1C12"), greenAccent, 24f)
+            background = pillBg(Color.parseColor("#E60B1A11"), greenAccent, 24f)
             setPadding(36, 20, 36, 20)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -656,6 +741,15 @@ class MainActivity : AppCompatActivity() {
                             loadUriAt(currentIndex + 1)
                         }
                     }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        showHud("Error: ${error.errorCodeName}")
+                        Toast.makeText(
+                            this@MainActivity,
+                            "No se pudo reproducir (${error.errorCodeName})",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 })
             }
             player = exo
@@ -669,8 +763,9 @@ class MainActivity : AppCompatActivity() {
     private fun loadUriAt(index: Int, startPositionMs: Long = 0L) {
         val p = player ?: return
         if (index !in playlist.indices) return
+        emptyCard.visibility = View.GONE
         val uri = playlist[index]
-        titleText.text = queryDisplayName(uri) ?: "Video"
+        titleText.text = queryDisplayName(uri) ?: "reproductor sidd"
 
         val builder = MediaItem.Builder().setUri(uri)
         externalSubtitleUri?.let { subUri ->
