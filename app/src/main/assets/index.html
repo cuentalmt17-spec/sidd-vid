@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Reproductor Verde Estilo VLC</title>
+  <style>
+    :root {
+      --bg: #eef7f1;
+      --panel: #ffffff;
+      --panel-soft: #e1f1e7;
+      --border: #bfe0cb;
+      --accent: #16a34a;
+      --accent-bright: #22c55e;
+      --accent-soft: #dcfce7;
+      --text: #0f291a;
+      --muted: #4b6b58;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #e7f5ec 0%, var(--bg) 100%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 12px;
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 820px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      border-radius: 16px;
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.08);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn {
+      background: var(--panel-soft);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 11px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn.accent {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+      box-shadow: 0 4px 10px rgba(22, 163, 74, 0.25);
+    }
+
+    .btn.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: #15803d;
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #07130c;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      box-shadow: 0 12px 28px rgba(15, 41, 26, 0.14);
+      touch-action: none;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .brightness-overlay {
+      position: absolute;
+      inset: 0;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.05s linear;
+    }
+
+    .hud {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15, 41, 26, 0.88);
+      color: #f0fdf4;
+      border: 1px solid rgba(134, 239, 172, 0.45);
+      padding: 12px 18px;
+      border-radius: 14px;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+      min-width: 148px;
+      z-index: 5;
+      backdrop-filter: blur(4px);
+    }
+
+    .hud.show {
+      opacity: 1;
+    }
+
+    .hud-label {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .hud-bar {
+      width: 124px;
+      height: 7px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 99px;
+      overflow: hidden;
+      margin: 0 auto;
+    }
+
+    .hud-fill {
+      height: 100%;
+      width: 50%;
+      background: var(--accent-bright);
+    }
+
+    .controls {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.07);
+    }
+
+    .seek-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .action-row,
+    .sub-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .step-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    select.speed-select {
+      background: var(--panel-soft);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--panel-soft);
+      padding: 8px 10px;
+      border-radius: 10px;
+    }
+
+    .playlist {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.07);
+    }
+
+    .playlist h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .video-item {
+      padding: 10px 12px;
+      border-radius: 11px;
+      background: var(--panel-soft);
+      border: 1px solid transparent;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      word-break: break-word;
+    }
+
+    .video-item.playing {
+      border-left: 4px solid var(--accent);
+      border-color: var(--border);
+      background: var(--accent-soft);
+      color: #14532d;
+      font-weight: 700;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top-bar">
+      <div class="btn-group">
+        <label class="btn accent" for="videoInput">Elegir videos</label>
+        <input id="videoInput" type="file" accept="video/*" multiple />
+
+        <label class="btn" for="subInput">Subtítulo (.srt/.vtt)</label>
+        <input id="subInput" type="file" accept=".srt,.vtt" />
+      </div>
+
+      <div class="btn-group">
+        <button class="btn" id="fsBtn">Pantalla completa</button>
+        <button class="btn" id="pipBtn">Ventana flotante</button>
+      </div>
+    </div>
+
+    <div class="stage" id="stage">
+      <video id="video" playsinline controlslist="nodownload"></video>
+      <div class="brightness-overlay" id="brightnessOverlay"></div>
+      <div class="hud" id="hud">
+        <div class="hud-label" id="hudLabel">Volumen: 80%</div>
+        <div class="hud-bar"><div class="hud-fill" id="hudFill"></div></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="seek-row">
+        <span id="curTime">00:00</span>
+        <input id="seek" type="range" min="0" max="100" value="0" step="0.1" />
+        <span id="totTime">00:00</span>
+      </div>
+
+      <div class="action-row">
+        <div class="btn-group">
+          <button class="btn" id="rewBtn">-10s</button>
+          <button class="btn accent" id="playBtn">Reproducir</button>
+          <button class="btn" id="fwdBtn">+10s</button>
+        </div>
+
+        <div class="step-group">
+          <span style="font-size:12px; color:var(--muted); font-weight:600;">Salto:</span>
+          <button class="btn step-btn" data-sec="5">5s</button>
+          <button class="btn step-btn active" data-sec="10">10s</button>
+          <button class="btn step-btn" data-sec="15">15s</button>
+          <button class="btn step-btn" data-sec="30">30s</button>
+        </div>
+      </div>
+
+      <div class="sub-row">
+        <div class="step-group">
+          <span style="font-size:12px; color:var(--muted); font-weight:600;">Velocidad:</span>
+          <select id="speedSelect" class="speed-select">
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2.0x</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="hint">
+        Desliza arriba/abajo a la <b>izquierda</b> para brillo y a la <b>derecha</b> para volumen. Doble toque a los lados para saltar.
+      </div>
+    </div>
+
+    <div class="playlist">
+      <h3>Videos cargados</h3>
+      <div id="playlistItems">
+        <div style="font-size:13px; color:var(--muted);">Aún no seleccionaste videos. Toca "Elegir videos".</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById("video");
+    const stage = document.getElementById("stage");
+    const videoInput = document.getElementById("videoInput");
+    const subInput = document.getElementById("subInput");
+    const playlistEl = document.getElementById("playlistItems");
+    const playBtn = document.getElementById("playBtn");
+    const rewBtn = document.getElementById("rewBtn");
+    const fwdBtn = document.getElementById("fwdBtn");
+    const fsBtn = document.getElementById("fsBtn");
+    const pipBtn = document.getElementById("pipBtn");
+    const speedSelect = document.getElementById("speedSelect");
+    const seek = document.getElementById("seek");
+    const curTime = document.getElementById("curTime");
+    const totTime = document.getElementById("totTime");
+    const brightnessOverlay = document.getElementById("brightnessOverlay");
+    const hud = document.getElementById("hud");
+    const hudLabel = document.getElementById("hudLabel");
+    const hudFill = document.getElementById("hudFill");
+
+    let stepSec = 10;
+    let brightness = 0.85;
+    let hudTimer = null;
+    let videosList = [];
+    let currentIndex = -1;
+
+    function fmt(s) {
+      if (!Number.isFinite(s) || s < 0) return "00:00";
+      const m = Math.floor(s / 60).toString().padStart(2, "0");
+      const sec = Math.floor(s % 60).toString().padStart(2, "0");
+      return `${m}:${sec}`;
+    }
+
+    function showHud(text, fraction) {
+      hudLabel.textContent = text;
+      hudFill.style.width = `${Math.max(0, Math.min(1, fraction)) * 100}%`;
+      hud.classList.add("show");
+      clearTimeout(hudTimer);
+      hudTimer = setTimeout(() => hud.classList.remove("show"), 800);
+    }
+
+    function updateStepButtons() {
+      document.querySelectorAll(".step-btn").forEach((b) => {
+        b.classList.toggle("active", Number(b.dataset.sec) === stepSec);
+      });
+      rewBtn.textContent = `-${stepSec}s`;
+      fwdBtn.textContent = `+${stepSec}s`;
+    }
+
+    document.querySelectorAll(".step-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        stepSec = Number(btn.dataset.sec);
+        updateStepButtons();
+        showHud(`Salto: ${stepSec}s`, stepSec / 30);
+      });
+    });
+
+    speedSelect.addEventListener("change", () => {
+      video.playbackRate = Number(speedSelect.value);
+      showHud(`Velocidad: ${speedSelect.value}x`, Math.min(1, Number(speedSelect.value) / 2));
+    });
+
+    function loadVideoAt(idx) {
+      if (idx < 0 || idx >= videosList.length) return;
+      currentIndex = idx;
+      const item = videosList[idx];
+      if (video.src && video.src.startsWith("blob:")) {
+        URL.revokeObjectURL(video.src);
+      }
+      video.src = URL.createObjectURL(item.file);
+      video.playbackRate = Number(speedSelect.value);
+      video.play().catch(() => {});
+      renderPlaylist();
+    }
+
+    function renderPlaylist() {
+      if (!videosList.length) return;
+      playlistEl.innerHTML = "";
+      videosList.forEach((v, i) => {
+        const div = document.createElement("div");
+        div.className = "video-item" + (i === currentIndex ? " playing" : "");
+        div.textContent = v.file.name;
+        div.onclick = () => loadVideoAt(i);
+        playlistEl.appendChild(div);
+      });
+    }
+
+    videoInput.addEventListener("change", (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      videosList = files.map((file) => ({ file }));
+      loadVideoAt(0);
+    });
+
+    function srtToVtt(srtText) {
+      const clean = srtText.replace(/\r+/g, "").trim();
+      const blocks = clean.split("\n\n").map((b) => b.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2"));
+      return "WEBVTT\n\n" + blocks.join("\n\n");
+    }
+
+    subInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      let text = await file.text();
+      if (file.name.toLowerCase().endsWith(".srt")) {
+        text = srtToVtt(text);
+      }
+      const blob = new Blob([text], { type: "text/vtt" });
+      const url = URL.createObjectURL(blob);
+
+      Array.from(video.querySelectorAll("track")).forEach((t) => t.remove());
+      const track = document.createElement("track");
+      track.kind = "subtitles";
+      track.label = file.name;
+      track.srclang = "es";
+      track.src = url;
+      track.default = true;
+      video.appendChild(track);
+      if (video.textTracks[0]) video.textTracks[0].mode = "showing";
+      showHud("Subtítulo cargado", 1);
+    });
+
+    playBtn.addEventListener("click", () => {
+      if (!video.src) return;
+      video.paused ? video.play() : video.pause();
+    });
+
+    video.addEventListener("play", () => (playBtn.textContent = "Pausar"));
+    video.addEventListener("pause", () => (playBtn.textContent = "Reproducir"));
+
+    rewBtn.addEventListener("click", () => {
+      video.currentTime = Math.max(0, video.currentTime - stepSec);
+      showHud(`-${stepSec}s`, 0.25);
+    });
+
+    fwdBtn.addEventListener("click", () => {
+      video.currentTime = Math.min(video.duration || Infinity, video.currentTime + stepSec);
+      showHud(`+${stepSec}s`, 0.75);
+    });
+
+    fsBtn.addEventListener("click", async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await (stage.requestFullscreen ? stage.requestFullscreen() : video.requestFullscreen());
+        } else {
+          await document.exitFullscreen();
+        }
+      } catch {
+        showHud("Pantalla completa no disponible", 0.3);
+      }
+    });
+
+    video.addEventListener("loadedmetadata", () => {
+      seek.max = video.duration || 100;
+      totTime.textContent = fmt(video.duration);
+    });
+
+    video.addEventListener("timeupdate", () => {
+      seek.value = video.currentTime || 0;
+      curTime.textContent = fmt(video.currentTime);
+    });
+
+    seek.addEventListener("input", () => {
+      video.currentTime = Number(seek.value);
+    });
+
+    pipBtn.addEventListener("click", async () => {
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
+          await video.requestPictureInPicture();
+        } else {
+          showHud("PiP no soportado aquí", 0.2);
+        }
+      } catch {
+        showHud("No se pudo activar PiP", 0.2);
+      }
+    });
+
+    let startX = 0, startY = 0, lastTap = 0, isDragging = false;
+
+    stage.addEventListener("touchstart", (e) => {
+      if (!e.touches.length) return;
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      isDragging = false;
+
+      const now = Date.now();
+      if (now - lastTap < 300 && video.src) {
+        const rect = stage.getBoundingClientRect();
+        const relX = t.clientX - rect.left;
+        if (relX < rect.width / 2) {
+          video.currentTime = Math.max(0, video.currentTime - stepSec);
+          showHud(`-${stepSec}s`, 0.25);
+        } else {
+          video.currentTime = Math.min(video.duration || Infinity, video.currentTime + stepSec);
+          showHud(`+${stepSec}s`, 0.75);
+        }
+      }
+      lastTap = now;
+    }, { passive: true });
+
+    stage.addEventListener("touchmove", (e) => {
+      if (!e.touches.length) return;
+      const t = e.touches[0];
+      const dy = startY - t.clientY;
+      if (Math.abs(dy) > 8) isDragging = true;
+      if (!isDragging) return;
+
+      const delta = dy / (stage.clientHeight * 0.65);
+      startY = t.clientY;
+
+      const rect = stage.getBoundingClientRect();
+      const isLeft = (startX - rect.left) < rect.width / 2;
+
+      if (isLeft) {
+        brightness = Math.max(0.15, Math.min(1, brightness + delta));
+        brightnessOverlay.style.opacity = String((1 - brightness) * 0.75);
+        showHud(`Brillo: ${Math.round(brightness * 100)}%`, brightness);
+      } else {
+        const nextVol = Math.max(0, Math.min(1, video.volume + delta));
+        video.volume = nextVol;
+        showHud(`Volumen: ${Math.round(nextVol * 100)}%`, nextVol);
+      }
+    }, { passive: true });
+  </script>
+</body>
+</html>
