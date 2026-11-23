@@ -1174,6 +1174,156 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    // ════════════════════════════════════════════════════════════════
+    // CARTEL 9: DIÁLOGOS, ACTUALIZACIÓN, TIEMPO Y CICLO DE VIDA
+    // ════════════════════════════════════════════════════════════════
+    private fun registerDownloadReceiverIfNeeded() {
+        if (downloadReceiverRegistered) return
+        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(downloadCompleteReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(downloadCompleteReceiver, filter)
+        }
+        downloadReceiverRegistered = true
+    }
+
+    private fun startGitHubApkDownload() {
+        showHud("Descargando APK...")
+        Toast.makeText(this, "Descargando actualización...", Toast.LENGTH_SHORT).show()
+
+        Thread {
+            try {
+                val targetDir = getExternalFilesDir(null) ?: cacheDir
+                val outFile = File(targetDir, apkFileName)
+                if (outFile.exists()) {
+                    outFile.delete()
+                }
+
+                val url = java.net.URL(githubApkUrl)
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    instanceFollowRedirects = true
+                    connectTimeout = 15_000
+                    readTimeout = 30_000
+                    requestMethod = "GET"
+                }
+                conn.connect()
+
+                if (conn.responseCode !in 200..299) {
+                    throw Exception("HTTP ${conn.responseCode}")
+                }
+
+                conn.inputStream.use { input ->
+                    outFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                conn.disconnect()
+
+                runOnUiThread {
+                    val apkUri = androidx.core.content.FileProvider.getUriForFile(
+                        this@MainActivity,
+                        "${packageName}.fileprovider",
+                        outFile
+                    )
+                    launchApkInstaller(apkUri)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "No se pudo descargar la actualización: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun launchApkInstaller(apkUri: Uri) {
+        try {
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(installIntent)
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "Abrí el archivo descargado para actualizar: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun showTracksDialog() {
+        val p = player
+        if (p == null || p.currentMediaItem == null) {
+            Toast.makeText(this, "Abre un video primero", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val options = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
+        options.add("Cargar subtítulo externo (.srt / .vtt)")
+        actions.add { pickSubtitleLauncher.launch(arrayOf("*/*")) }
+
+        val groups = p.currentTracks.groups
+        groups.forEach { group ->
+            if (group.type == C.TRACK_TYPE_AUDIO) {
+                for (i in 0 until group.length) {
+                    val fmt = group.getTrackFormat(i)
+                    val lang = fmt.language ?: "und"
+                    val label = fmt.label ?: "Pista ${i + 1}"
+                    val activeTag = if (group.isTrackSelected(i)) " [Activo]" else ""
+                    options.add("Audio: $label ($lang)$activeTag")
+                    actions.add {
+                        p.trackSelectionParameters = p.trackSelectionParameters
+                            .buildUpon()
+                            .setOverrideForType(
+                                TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
+                            )
+                            .build()
+                        showHud("Audio: $label ($lang)")
+                    }
+                }
+            }
+        }
+
+        options.add("Desactivar subtítulos")
+        actions.add {
+            p.trackSelectionParameters = p.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            showHud("Subtítulos desactivados")
+        }
+
+        groups.forEach { group ->
+            if (group.type == C.TRACK_TYPE_TEXT) {
+                for (i in 0 until group.length) {
+                    val fmt = group.getTrackFormat(i)
+                    val lang = fmt.language ?: "und"
+                    val label = fmt.label ?: "Subtítulo ${i + 1}"
+                    val activeTag = if (group.isTrackSelected(i)) " [Activo]" else ""
+                    options.add("Sub: $label ($lang)$activeTag")
+                    actions.add {
+                        p.trackSelectionParameters = p.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setOverrideForType(
+                                TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
+                            )
+                            .build()
+                        showHud("Subtítulo: $label ($lang)")
+                    }
+                }
+            }
+        }
+
         AlertDialog.Builder(this)
             .setTitle("Audio y subtítulos")
             .setItems(options.toTypedArray()) { _, which ->
