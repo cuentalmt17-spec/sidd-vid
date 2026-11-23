@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playerView: PlayerView
     private lateinit var brightnessOverlay: View
     private lateinit var emptyCard: LinearLayout
+    private lateinit var centerRow: LinearLayout
     private lateinit var uiOverlay: FrameLayout
     private lateinit var splashOverlay: FrameLayout
     private lateinit var splashLogoView: ImageView
@@ -115,6 +116,7 @@ class MainActivity : AppCompatActivity() {
                 currentIndex = 0
                 externalSubtitleUri = null
                 emptyCard.visibility = View.GONE
+                centerRow.visibility = View.VISIBLE
                 loadUriAt(0)
             }
         }
@@ -233,7 +235,7 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(brightnessOverlay)
 
-        // Tarjeta de bienvenida mientras no hay video cargado
+        // Tarjeta limpia de inicio (solo título y botón Seleccionar video)
         emptyCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -242,7 +244,7 @@ class MainActivity : AppCompatActivity() {
                 Color.parseColor("#664ADE80"),
                 36f
             )
-            setPadding(48, 40, 48, 40)
+            setPadding(56, 48, 56, 48)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -253,51 +255,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val badgeText = TextView(this).apply {
-            text = "▶"
-            textSize = 26f
-            setTextColor(greenBright)
-            gravity = Gravity.CENTER
-        }
-
         val appHeading = TextView(this).apply {
             text = "reproductor sidd"
-            textSize = 20f
+            textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#F0FDF4"))
             gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 8 }
-        }
-
-        val appSub = TextView(this).apply {
-            text = "MKV • Multi-audio • Subtítulos • Saltos 15s/30s"
-            textSize = 12f
-            setTextColor(Color.parseColor("#86EFAC"))
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 6 }
         }
 
         val choosePrimaryBtn = makeChipButton("Seleccionar video", highlighted = true).apply {
             textSize = 14f
-            setPadding(36, 16, 36, 16)
+            setPadding(40, 18, 40, 18)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 20 }
+            ).apply { topMargin = 24 }
             setOnClickListener {
                 pickVideosLauncher.launch(arrayOf("video/*"))
             }
         }
 
-        emptyCard.addView(badgeText)
         emptyCard.addView(appHeading)
-        emptyCard.addView(appSub)
         emptyCard.addView(choosePrimaryBtn)
         rootLayout.addView(emptyCard)
 
@@ -355,33 +333,33 @@ class MainActivity : AppCompatActivity() {
         topBar.addView(tracksBtn)
         uiOverlay.addView(topBar)
 
-        val centerRow = LinearLayout(this).apply {
+        // Controles centrales grandes (ocultos al inicio hasta que haya un video)
+        centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
+            visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER
-            ).apply {
-                topMargin = 36
-            }
+            )
         }
 
         val backBtn = makeChipButton("⏮").apply {
-            textSize = 17f
-            setPadding(28, 18, 28, 18)
+            textSize = 22f
+            setPadding(44, 28, 44, 28)
             setOnClickListener { jumpBy(-doubleTapStepMs) }
         }
 
         playPauseBtn = makeChipButton("▶", highlighted = true).apply {
-            textSize = 19f
-            setPadding(38, 24, 38, 24)
+            textSize = 26f
+            setPadding(56, 36, 56, 36)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                leftMargin = 28
-                rightMargin = 28
+                leftMargin = 38
+                rightMargin = 38
             }
             setOnClickListener {
                 val p = player ?: return@setOnClickListener
@@ -397,8 +375,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val fwdBtn = makeChipButton("⏭").apply {
-            textSize = 17f
-            setPadding(28, 18, 28, 18)
+            textSize = 22f
+            setPadding(44, 28, 44, 28)
             setOnClickListener { jumpBy(doubleTapStepMs) }
         }
 
@@ -919,6 +897,7 @@ class MainActivity : AppCompatActivity() {
         val p = player ?: return
         if (index !in playlist.indices) return
         emptyCard.visibility = View.GONE
+        centerRow.visibility = View.VISIBLE
         val uri = playlist[index]
         titleText.text = queryDisplayName(uri) ?: "reproductor sidd"
 
