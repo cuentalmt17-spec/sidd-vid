@@ -2,6 +2,8 @@ package com.tuapp.reproductor
 
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -15,7 +17,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -34,7 +35,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -63,7 +63,6 @@ class MainActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var playlist: List<Uri> = emptyList()
     private var currentIndex: Int = -1
-    private var currentTitle: String = "Siddhartha video"
     private var externalSubtitleUri: Uri? = null
 
     private val speeds = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
@@ -95,7 +94,7 @@ class MainActivity : AppCompatActivity() {
                             uri,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION
                         )
-                    } catch (_: SecurityException) {
+                    } catch (_: Exception) {
                     }
                 }
                 playlist = uris
@@ -113,7 +112,7 @@ class MainActivity : AppCompatActivity() {
                         uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION
                     )
-                } catch (_: SecurityException) {
+                } catch (_: Exception) {
                 }
                 externalSubtitleUri = uri
                 if (currentIndex in playlist.indices) {
@@ -128,17 +127,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        hideSystemBars()
-        buildUi()
-        initPlayer()
+        try {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            hideSystemBars()
+            buildUi()
+            setContentView(rootLayout)
+            initPlayer()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error al iniciar: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun hideSystemBars() {
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        controller.hide(WindowInsetsCompat.Type.systemBars())
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        try {
+            val controller = WindowInsetsControllerCompat(window, window.decorView)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        } catch (_: Exception) {
+        }
     }
 
     private fun pillBg(bgColor: Int, strokeColor: Int, radiusPx: Float = 999f): GradientDrawable {
@@ -154,7 +161,7 @@ class MainActivity : AppCompatActivity() {
             text = label
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
-            setAllCaps(false)
+            isAllCaps = false
             setTextColor(if (highlighted) Color.parseColor("#BBF7D0") else Color.parseColor("#ECFDF5"))
             background = pillBg(
                 if (highlighted) Color.parseColor("#4422C55E") else Color.parseColor("#AA102417"),
@@ -206,7 +213,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // Barra superior
         topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -220,15 +226,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         titleText = TextView(this).apply {
-            text = "Siddhartha video — Toca 📂 para elegir video"
-            textSize = 15f
+            text = "reproductor sidd — Toca Videos para elegir"
+            textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#F0FDF4"))
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        val openBtn = makeChipButton("📂 Videos", highlighted = true).apply {
+        val openBtn = makeChipButton("Videos", highlighted = true).apply {
             setOnClickListener {
                 pickVideosLauncher.launch(arrayOf("video/*"))
                 resetHideTimer()
@@ -236,12 +242,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         val tracksBtn = makeChipButton("CC / Audio", highlighted = true).apply {
-            val lp = LinearLayout.LayoutParams(
+            layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            lp.leftMargin = 14
-            layoutParams = lp
+            ).apply { leftMargin = 12 }
             setOnClickListener {
                 showTracksDialog()
                 resetHideTimer()
@@ -253,7 +257,6 @@ class MainActivity : AppCompatActivity() {
         topBar.addView(tracksBtn)
         uiOverlay.addView(topBar)
 
-        // Controles centrales
         val centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -270,16 +273,16 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { jumpBy(-doubleTapStepMs) }
         }
 
-        playPauseBtn = makeChipButton("❚❚", highlighted = true).apply {
+        playPauseBtn = makeChipButton("▶", highlighted = true).apply {
             textSize = 20f
             setPadding(42, 28, 42, 28)
-            val lp = LinearLayout.LayoutParams(
+            layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            lp.leftMargin = 36
-            lp.rightMargin = 36
-            layoutParams = lp
+            ).apply {
+                leftMargin = 36
+                rightMargin = 36
+            }
             setOnClickListener {
                 val p = player ?: return@setOnClickListener
                 if (p.currentMediaItem == null) {
@@ -304,7 +307,6 @@ class MainActivity : AppCompatActivity() {
         centerRow.addView(fwdBtn)
         uiOverlay.addView(centerRow)
 
-        // Panel inferior: progreso + saltos 15s/30s + herramientas
         bottomPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#99000000"))
@@ -333,8 +335,8 @@ class MainActivity : AppCompatActivity() {
 
         seekBar = SeekBar(this).apply {
             max = 1000
-            progressTintList = android.content.res.ColorStateList.valueOf(greenAccent)
-            thumbTintList = android.content.res.ColorStateList.valueOf(greenAccent)
+            progressTintList = ColorStateList.valueOf(greenAccent)
+            thumbTintList = ColorStateList.valueOf(greenAccent)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = 16
                 rightMargin = 16
@@ -382,9 +384,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 10
-            }
+            ).apply { topMargin = 10 }
         }
 
         val jumpRow = LinearLayout(this).apply {
@@ -406,12 +406,12 @@ class MainActivity : AppCompatActivity() {
         val f15 = makeChipButton("+15s").apply { setOnClickListener { jumpBy(15_000L) } }
         val f30 = makeChipButton("+30s").apply { setOnClickListener { jumpBy(30_000L) } }
 
-        val margin4 = LinearLayout.LayoutParams(
+        val chipMargin = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { rightMargin = 10 }
 
-        b30.layoutParams = margin4
+        b30.layoutParams = chipMargin
         b15.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -439,9 +439,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 10
-            }
+            ).apply { topMargin = 10 }
         }
 
         val listBtn = makeChipButton("Lista").apply {
@@ -475,10 +473,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val rotateBtn = makeChipButton("⟳ Girar").apply {
+        val rotateBtn = makeChipButton("Girar").apply {
             setOnClickListener {
                 requestedOrientation = if (resources.configuration.orientation ==
-                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    Configuration.ORIENTATION_LANDSCAPE
                 ) {
                     ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 } else {
@@ -488,7 +486,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        lockBtn = makeChipButton("🔒").apply {
+        lockBtn = makeChipButton("Bloquear").apply {
             setOnClickListener {
                 isLocked = true
                 setUiVisible(false)
@@ -544,7 +542,7 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(hudText)
 
-        unlockBtn = makeChipButton("🔓 Desbloquear", highlighted = true).apply {
+        unlockBtn = makeChipButton("Desbloquear", highlighted = true).apply {
             visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -563,7 +561,6 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(unlockBtn)
 
         setupGestures()
-        setContentView(rootLayout)
     }
 
     private fun setupGestures() {
@@ -640,39 +637,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initPlayer() {
-        val exo = ExoPlayer.Builder(this).build().apply {
-            playWhenReady = true
-            addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    playPauseBtn.text = if (isPlaying) "❚❚" else "▶"
-                    if (isPlaying && !isLocked) {
-                        resetHideTimer()
-                    } else {
-                        mainHandler.removeCallbacks(hideUiRunnable)
-                        if (!isLocked) setUiVisible(true)
+        try {
+            val exo = ExoPlayer.Builder(this).build().apply {
+                playWhenReady = true
+                addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        playPauseBtn.text = if (isPlaying) "❚❚" else "▶"
+                        if (isPlaying && !isLocked) {
+                            resetHideTimer()
+                        } else {
+                            mainHandler.removeCallbacks(hideUiRunnable)
+                            if (!isLocked) setUiVisible(true)
+                        }
                     }
-                }
 
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) {
-                        if (currentIndex + 1 < playlist.size) {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED && currentIndex + 1 < playlist.size) {
                             loadUriAt(currentIndex + 1)
                         }
                     }
-                }
-            })
+                })
+            }
+            player = exo
+            playerView.player = exo
+            mainHandler.post(progressRunnable)
+        } catch (e: Exception) {
+            Toast.makeText(this, "No se pudo iniciar reproductor: ${e.message}", Toast.LENGTH_LONG).show()
         }
-        player = exo
-        playerView.player = exo
-        mainHandler.post(progressRunnable)
     }
 
     private fun loadUriAt(index: Int, startPositionMs: Long = 0L) {
         val p = player ?: return
         if (index !in playlist.indices) return
         val uri = playlist[index]
-        currentTitle = queryDisplayName(uri) ?: "Video"
-        titleText.text = currentTitle
+        titleText.text = queryDisplayName(uri) ?: "Video"
 
         val builder = MediaItem.Builder().setUri(uri)
         externalSubtitleUri?.let { subUri ->
@@ -717,7 +715,7 @@ class MainActivity : AppCompatActivity() {
         val options = mutableListOf<String>()
         val actions = mutableListOf<() -> Unit>()
 
-        options.add("➕ Cargar subtítulo externo (.srt / .vtt)")
+        options.add("Cargar subtítulo externo (.srt / .vtt)")
         actions.add { pickSubtitleLauncher.launch(arrayOf("*/*")) }
 
         val groups = p.currentTracks.groups
@@ -727,8 +725,8 @@ class MainActivity : AppCompatActivity() {
                     val fmt = group.getTrackFormat(i)
                     val lang = fmt.language ?: "und"
                     val label = fmt.label ?: "Pista ${i + 1}"
-                    val activeTag = if (group.isTrackSelected(i)) " ✓" else ""
-                    options.add("🔊 Audio: $label ($lang)$activeTag")
+                    val activeTag = if (group.isTrackSelected(i)) " [Activo]" else ""
+                    options.add("Audio: $label ($lang)$activeTag")
                     actions.add {
                         p.trackSelectionParameters = p.trackSelectionParameters
                             .buildUpon()
@@ -742,7 +740,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        options.add("🚫 Desactivar subtítulos")
+        options.add("Desactivar subtítulos")
         actions.add {
             p.trackSelectionParameters = p.trackSelectionParameters
                 .buildUpon()
@@ -757,8 +755,8 @@ class MainActivity : AppCompatActivity() {
                     val fmt = group.getTrackFormat(i)
                     val lang = fmt.language ?: "und"
                     val label = fmt.label ?: "Subtítulo ${i + 1}"
-                    val activeTag = if (group.isTrackSelected(i)) " ✓" else ""
-                    options.add("💬 Sub: $label ($lang)$activeTag")
+                    val activeTag = if (group.isTrackSelected(i)) " [Activo]" else ""
+                    options.add("Sub: $label ($lang)$activeTag")
                     actions.add {
                         p.trackSelectionParameters = p.trackSelectionParameters
                             .buildUpon()
@@ -802,14 +800,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (idx >= 0) return cursor.getString(idx)
-                }
-            }
-        return uri.lastPathSegment
+        return try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) return cursor.getString(idx)
+                    }
+                    null
+                } ?: uri.lastPathSegment
+        } catch (_: Exception) {
+            uri.lastPathSegment
+        }
     }
 
     private fun updateProgressUi() {
