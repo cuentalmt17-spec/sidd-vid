@@ -51,6 +51,9 @@ import androidx.media3.ui.PlayerView
 import java.util.Locale
 import kotlin.math.abs
 
+// ════════════════════════════════════════════════════════════════
+// CARTEL 1: VARIABLES, ESTADO DEL REPRODUCTOR Y LAUNCHERS
+// ════════════════════════════════════════════════════════════════
 class MainActivity : AppCompatActivity() {
 
     private lateinit var rootLayout: FrameLayout
@@ -142,6 +145,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    // ════════════════════════════════════════════════════════════════
+    // CARTEL 2: ONCREATE Y BARRAS DEL SISTEMA
+    // ════════════════════════════════════════════════════════════════
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
@@ -172,6 +178,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // CARTEL 3: ESTILOS DE BOTONES (CHIPS Y PÍLDORAS CENTRALES)
+    // ════════════════════════════════════════════════════════════════
     private fun pillBg(bgColor: Int, strokeColor: Int, radiusPx: Float = 999f): GradientDrawable {
         return GradientDrawable().apply {
             setColor(bgColor)
@@ -201,6 +210,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun makeTransportPill(label: String, isPrimary: Boolean): Button {
+        return Button(this).apply {
+            text = label
+            textSize = if (isPrimary) 18f else 16f
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            maxLines = 1
+            setTextColor(Color.parseColor("#ECFDF5"))
+            background = pillBg(
+                if (isPrimary) Color.parseColor("#6622C55E") else Color.parseColor("#C40B1910"),
+                if (isPrimary) Color.parseColor("#4ADE80") else Color.parseColor("#66BBF7D0"),
+                999f
+            )
+            setPadding(if (isPrimary) 64 else 52, if (isPrimary) 22 else 20, if (isPrimary) 64 else 52, if (isPrimary) 22 else 20)
+            minimumHeight = 0
+            minHeight = 0
+            minWidth = if (isPrimary) 168 else 142
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // CARTEL 4: BASE DEL REPRODUCTOR, BRILLO Y TARJETA INICIAL
+    // ════════════════════════════════════════════════════════════════
     private fun buildUi() {
         val greenAccent = Color.parseColor("#22C55E")
         val greenBright = Color.parseColor("#4ADE80")
@@ -235,7 +267,7 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(brightnessOverlay)
 
-        // Tarjeta limpia de inicio (solo título y botón Seleccionar video)
+        // Tarjeta limpia de inicio (solo título "reproductor sidd" y botón Seleccionar video)
         emptyCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -244,28 +276,29 @@ class MainActivity : AppCompatActivity() {
                 Color.parseColor("#664ADE80"),
                 36f
             )
-            setPadding(56, 48, 56, 48)
+            setPadding(64, 52, 64, 52)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER
             ).apply {
-                leftMargin = 40
-                rightMargin = 40
+                leftMargin = 36
+                rightMargin = 36
             }
         }
 
         val appHeading = TextView(this).apply {
             text = "reproductor sidd"
-            textSize = 22f
+            textSize = 21f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#F0FDF4"))
             gravity = Gravity.CENTER
+            maxLines = 1
         }
 
         val choosePrimaryBtn = makeChipButton("Seleccionar video", highlighted = true).apply {
             textSize = 14f
-            setPadding(40, 18, 40, 18)
+            setPadding(42, 18, 42, 18)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -279,6 +312,9 @@ class MainActivity : AppCompatActivity() {
         emptyCard.addView(choosePrimaryBtn)
         rootLayout.addView(emptyCard)
 
+        // ════════════════════════════════════════════════════════════════
+        // CARTEL 5: BARRA SUPERIOR, CONTROLES CENTRALES Y PANEL INFERIOR
+        // ════════════════════════════════════════════════════════════════
         uiOverlay = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -333,7 +369,7 @@ class MainActivity : AppCompatActivity() {
         topBar.addView(tracksBtn)
         uiOverlay.addView(topBar)
 
-        // Controles centrales grandes (ocultos al inicio hasta que haya un video)
+        // Controles centrales anchos estilo píldora (ocultos al inicio hasta que haya un video)
         centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -345,21 +381,17 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        val backBtn = makeChipButton("⏮").apply {
-            textSize = 22f
-            setPadding(44, 28, 44, 28)
+        val backBtn = makeTransportPill("⏮", isPrimary = false).apply {
             setOnClickListener { jumpBy(-doubleTapStepMs) }
         }
 
-        playPauseBtn = makeChipButton("▶", highlighted = true).apply {
-            textSize = 26f
-            setPadding(56, 36, 56, 36)
+        playPauseBtn = makeTransportPill("▶", isPrimary = true).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                leftMargin = 38
-                rightMargin = 38
+                leftMargin = 24
+                rightMargin = 24
             }
             setOnClickListener {
                 val p = player ?: return@setOnClickListener
@@ -374,9 +406,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val fwdBtn = makeChipButton("⏭").apply {
-            textSize = 22f
-            setPadding(44, 28, 44, 28)
+        val fwdBtn = makeTransportPill("⏭", isPrimary = false).apply {
             setOnClickListener { jumpBy(doubleTapStepMs) }
         }
 
@@ -605,6 +635,9 @@ class MainActivity : AppCompatActivity() {
         uiOverlay.addView(bottomPanel)
         rootLayout.addView(uiOverlay)
 
+        // ════════════════════════════════════════════════════════════════
+        // CARTEL 6: HUD, DESBLOQUEO Y ANIMACIÓN INICIAL (SPLASH)
+        // ════════════════════════════════════════════════════════════════
         hudText = TextView(this).apply {
             visibility = View.GONE
             textSize = 14f
@@ -781,6 +814,9 @@ class MainActivity : AppCompatActivity() {
         enterSet.start()
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // CARTEL 7: GESTOS TÁCTILES (TOQUES, BRILLO Y VOLUMEN)
+    // ════════════════════════════════════════════════════════════════
     private fun setupGestures() {
         var lastX = 0f
         var lastY = 0f
@@ -854,6 +890,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // CARTEL 8: EXOPLAYER, CARGA DE VIDEO Y SALTOS
+    // ════════════════════════════════════════════════════════════════
     private fun initPlayer() {
         try {
             val exo = ExoPlayer.Builder(this).build().apply {
@@ -934,6 +973,9 @@ class MainActivity : AppCompatActivity() {
         resetHideTimer()
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // CARTEL 9: DIÁLOGOS, TIEMPO, VISIBILIDAD Y CICLO DE VIDA
+    // ════════════════════════════════════════════════════════════════
     private fun showTracksDialog() {
         val p = player
         if (p == null || p.currentMediaItem == null) {
