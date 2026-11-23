@@ -1,6 +1,7 @@
-
 package com.tuapp.reproductor
 
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
@@ -20,16 +21,21 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.animation.doOnEnd
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -52,6 +58,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var brightnessOverlay: View
     private lateinit var emptyCard: LinearLayout
     private lateinit var uiOverlay: FrameLayout
+    private lateinit var splashOverlay: FrameLayout
+    private lateinit var splashLogoView: ImageView
     private lateinit var topBar: LinearLayout
     private lateinit var bottomPanel: LinearLayout
     private lateinit var titleText: TextView
@@ -78,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private var isUserSeeking = false
     private var isZoomMode = false
     private var brightnessLevel = 0.85f
+    private var splashPlayed = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hideUiRunnable = Runnable { setUiVisible(false) }
@@ -140,6 +149,12 @@ class MainActivity : AppCompatActivity() {
             buildUi()
             setContentView(rootLayout)
             initPlayer()
+            if (!splashPlayed) {
+                splashPlayed = true
+                startSplashAnimation()
+            } else {
+                splashOverlay.visibility = View.GONE
+            }
         } catch (e: Exception) {
             Toast.makeText(this, "Error al iniciar: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -190,7 +205,7 @@ class MainActivity : AppCompatActivity() {
         val greenSoftText = Color.parseColor("#DCFCE7")
 
         rootLayout = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#07110B"))
+            setBackgroundColor(Color.parseColor("#06120B"))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -200,7 +215,7 @@ class MainActivity : AppCompatActivity() {
         playerView = PlayerView(this).apply {
             useController = false
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-            setBackgroundColor(Color.parseColor("#07110B"))
+            setBackgroundColor(Color.parseColor("#06120B"))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -223,7 +238,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             background = pillBg(
-                Color.parseColor("#E60B1A11"),
+                Color.parseColor("#E60A1B11"),
                 Color.parseColor("#664ADE80"),
                 36f
             )
@@ -296,7 +311,7 @@ class MainActivity : AppCompatActivity() {
         topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#9907110B"))
+            setBackgroundColor(Color.parseColor("#9906120B"))
             setPadding(28, 24, 28, 20)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -394,7 +409,7 @@ class MainActivity : AppCompatActivity() {
 
         bottomPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#B307110B"))
+            setBackgroundColor(Color.parseColor("#B306120B"))
             setPadding(28, 16, 28, 24)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -617,7 +632,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#ECFDF5"))
-            background = pillBg(Color.parseColor("#E60B1A11"), greenAccent, 24f)
+            background = pillBg(Color.parseColor("#E60A1B11"), greenAccent, 24f)
             setPadding(36, 20, 36, 20)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -645,7 +660,147 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(unlockBtn)
 
+        // Capa de animación inicial (Splash) con fondo verde oscuro y logo
+        splashOverlay = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#05110A"))
+            alpha = 1f
+            isClickable = true
+            isFocusable = true
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        val splashCenter = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        }
+
+        val logoFrame = FrameLayout(this).apply {
+            background = pillBg(
+                Color.parseColor("#2222C55E"),
+                Color.parseColor("#994ADE80"),
+                44f
+            )
+            setPadding(24, 24, 24, 24)
+            layoutParams = LinearLayout.LayoutParams(240, 240)
+        }
+
+        splashLogoView = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            try {
+                setImageResource(R.drawable.ic_sidd_logo)
+            } catch (_: Exception) {
+            }
+        }
+        logoFrame.addView(splashLogoView)
+
+        val splashTitle = TextView(this).apply {
+            text = "reproductor sidd"
+            textSize = 24f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#F0FDF4"))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 22 }
+        }
+
+        val splashLoading = TextView(this).apply {
+            text = "Cargando..."
+            textSize = 13f
+            setTextColor(Color.parseColor("#86EFAC"))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 6 }
+        }
+
+        val splashSpinner = ProgressBar(this).apply {
+            indeterminateTintList = ColorStateList.valueOf(greenBright)
+            layoutParams = LinearLayout.LayoutParams(76, 76).apply { topMargin = 16 }
+        }
+
+        splashCenter.addView(logoFrame)
+        splashCenter.addView(splashTitle)
+        splashCenter.addView(splashLoading)
+        splashCenter.addView(splashSpinner)
+        splashOverlay.addView(splashCenter)
+
+        val splashFooter = TextView(this).apply {
+            text = "Siddhartha video"
+            textSize = 11f
+            setTextColor(Color.parseColor("#6686EFAC"))
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            ).apply { bottomMargin = 42 }
+        }
+        splashOverlay.addView(splashFooter)
+
+        rootLayout.addView(splashOverlay)
+
         setupGestures()
+    }
+
+    private fun startSplashAnimation() {
+        splashLogoView.scaleX = 0.72f
+        splashLogoView.scaleY = 0.72f
+        splashLogoView.alpha = 0f
+
+        val logoScaleX = ObjectAnimator.ofFloat(splashLogoView, View.SCALE_X, 0.72f, 1.05f, 1.0f).apply {
+            duration = 750L
+            interpolator = OvershootInterpolator(1.2f)
+        }
+        val logoScaleY = ObjectAnimator.ofFloat(splashLogoView, View.SCALE_Y, 0.72f, 1.05f, 1.0f).apply {
+            duration = 750L
+            interpolator = OvershootInterpolator(1.2f)
+        }
+        val logoAlpha = ObjectAnimator.ofFloat(splashLogoView, View.ALPHA, 0f, 1f).apply {
+            duration = 550L
+        }
+
+        val enterSet = AnimatorSet().apply {
+            playTogether(logoScaleX, logoScaleY, logoAlpha)
+        }
+
+        enterSet.doOnEnd {
+            mainHandler.postDelayed({
+                val fadeOut = ObjectAnimator.ofFloat(splashOverlay, View.ALPHA, 1f, 0f).apply {
+                    duration = 650L
+                    interpolator = AccelerateDecelerateInterpolator()
+                }
+                val zoomOut = ObjectAnimator.ofFloat(splashOverlay, View.SCALE_X, 1f, 1.06f).apply {
+                    duration = 650L
+                }
+                val zoomOutY = ObjectAnimator.ofFloat(splashOverlay, View.SCALE_Y, 1f, 1.06f).apply {
+                    duration = 650L
+                }
+                AnimatorSet().apply {
+                    playTogether(fadeOut, zoomOut, zoomOutY)
+                    doOnEnd {
+                        splashOverlay.visibility = View.GONE
+                    }
+                    start()
+                }
+            }, 650L)
+        }
+
+        enterSet.start()
     }
 
     private fun setupGestures() {
